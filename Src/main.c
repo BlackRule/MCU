@@ -154,9 +154,7 @@ int main(void) {
 	osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
 	defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-	/* definition and creation of netTask */
-	osThreadDef(netTask, StartNetTask, osPriorityAboveNormal, 0, 512);
-	netTaskHandle = osThreadCreate(osThread(netTask), NULL);
+
 
 	/* USER CODE BEGIN RTOS_THREADS */
 	/* add threads, ... */
@@ -291,7 +289,7 @@ static void MX_TIM3_Init(void) {
 	htim3.Instance = TIM3;
 	htim3.Init.Prescaler = 35999;
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 2;
+	htim3.Init.Period = 4;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim3) != HAL_OK) {
@@ -372,8 +370,9 @@ static void MX_GPIO_Init(void) {
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
-	osMessagePut(DMA_Ethernet_QueueHandle, ADC_Data[0], 990);
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+	osMessagePut(DMA_Ethernet_QueueHandle, ADC_Data[0], 0);
+	int a=5;
 }
 /* USER CODE END 4 */
 
@@ -487,9 +486,9 @@ void StartNetTask(void const *argument) {
 	uint16_t len;
 	printf("Incoming connection\r\n");
 	HAL_TIM_Base_Start_IT(&htim3);
-	HAL_ADC_Start_DMA(&hadc1, (uint32_t *) &ADC_Data, 2);
-	int ad = DMA1_Channel1->CCR;
-	int ad2 = ADC1->CR2;
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t *) &ADC_Data, 1);
+//	int ad = DMA1_Channel1->CCR;
+//	int ad2 = ADC1->CR2;
 	sprintf(buffer, "Hello from STM32F746BGT6!\r\n");
 	netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 
@@ -497,37 +496,15 @@ void StartNetTask(void const *argument) {
 	netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 	osEvent event;
 	for (;;) {
-		event = osMessageGet(DMA_Ethernet_QueueHandle, 990);
-		sprintf(buffer, "Event %d!\r\n", event.status);
-		netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
+		event = osMessageGet(DMA_Ethernet_QueueHandle, 0);
+//		sprintf(buffer, "Event %x!\r\n", event.status);
+//		netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 		if (event.status == osEventMessage) {
-			sprintf(buffer, "OSEvent!\r\n");
-			netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 			sprintf(buffer, "from dma %lu", event.value.v);
 			netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 		}
 	}
 	/* USER CODE END StartNetTask */
-}
-
-/**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM1 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	/* USER CODE BEGIN Callback 0 */
-
-	/* USER CODE END Callback 0 */
-	if (htim->Instance == TIM1) {
-		HAL_IncTick();
-	}
-	/* USER CODE BEGIN Callback 1 */
-
-	/* USER CODE END Callback 1 */
 }
 
 /**
