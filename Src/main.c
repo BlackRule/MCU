@@ -222,7 +222,7 @@ void SystemClock_Config(void) {
 								  | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
 	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
 	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV8;
+	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
 	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
 	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
@@ -287,9 +287,9 @@ static void MX_TIM3_Init(void) {
 	TIM_MasterConfigTypeDef sMasterConfig;
 
 	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 35999;
+	htim3.Init.Prescaler = 1124; //72000k/(1124+1)=64k per sec
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 4;
+	htim3.Init.Period = 4; //16k per sec
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim3) != HAL_OK) {
@@ -371,8 +371,10 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
-	osMessagePut(DMA_Ethernet_QueueHandle, ADC_Data[0], 0);
-	int a=5;
+	osMessagePut(DMA_Ethernet_QueueHandle,
+			ADC_Data[0],
+//				 -1,//((uint16_t)'t' << 8) | (uint16_t)'e'
+				 0);
 }
 /* USER CODE END 4 */
 
@@ -489,19 +491,14 @@ void StartNetTask(void const *argument) {
 	HAL_ADC_Start_DMA(&hadc1, (uint32_t *) &ADC_Data, 1);
 //	int ad = DMA1_Channel1->CCR;
 //	int ad2 = ADC1->CR2;
-	sprintf(buffer, "Hello from STM32F746BGT6!\r\n");
-	netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 
-	sprintf(buffer, "Hope ADC->DMA->ETHERNET works now\r\n");
-	netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 	osEvent event;
 	for (;;) {
 		event = osMessageGet(DMA_Ethernet_QueueHandle, 0);
 //		sprintf(buffer, "Event %x!\r\n", event.status);
 //		netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 		if (event.status == osEventMessage) {
-			sprintf(buffer, "from dma %lu", event.value.v);
-			netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
+			netconn_write(nc, event.value.p, 2, NETCONN_COPY);
 		}
 	}
 	/* USER CODE END StartNetTask */
