@@ -66,12 +66,11 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 osThreadId defaultTaskHandle;
-osThreadId netTaskHandle;
 osMessageQId DMA_Ethernet_QueueHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-volatile uint16_t ADC_Data[1];
+volatile uint16_t ADC_Data[128]; //2*1KB
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,8 +88,6 @@ static void MX_TIM3_Init(void);
 
 void StartDefaultTask(void const *argument);
 
-void StartNetTask(void const *argument);
-
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 #define printf(format) sprintf (pbuffer, format);HAL_UART_Transmit(&huart2, pbuffer, strlen(pbuffer), 0xFFFF)
@@ -98,6 +95,8 @@ void StartNetTask(void const *argument);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+osThreadId netTaskHandle;
+void StartNetTask(void const *argument);
 
 /* USER CODE END 0 */
 
@@ -154,16 +153,14 @@ int main(void) {
 	osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
 	defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-
-
 	/* USER CODE BEGIN RTOS_THREADS */
-	/* add threads, ... */
+
 	/* USER CODE END RTOS_THREADS */
 
 	/* Create the queue(s) */
 	/* definition and creation of DMA_Ethernet_Queue */
 /* what about the sizeof here??? cd native code */
-	osMessageQDef(DMA_Ethernet_Queue, 1, uint16_t);
+	osMessageQDef(DMA_Ethernet_Queue, 64, uint16_t);
 	DMA_Ethernet_QueueHandle = osMessageCreate(osMessageQ(DMA_Ethernet_Queue), NULL);
 
 	/* USER CODE BEGIN RTOS_QUEUES */
@@ -263,7 +260,7 @@ static void MX_ADC1_Init(void) {
 	hadc1.Init.ContinuousConvMode = DISABLE;
 	hadc1.Init.DiscontinuousConvMode = DISABLE;
 	hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
-	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+	hadc1.Init.DataAlign = ADC_DATAALIGN_LEFT;
 	hadc1.Init.NbrOfConversion = 1;
 	if (HAL_ADC_Init(&hadc1) != HAL_OK) {
 		_Error_Handler(__FILE__, __LINE__);
@@ -370,11 +367,17 @@ static void MX_GPIO_Init(void) {
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc) {
+	for (int i = 0; i < 64; ++i) {
+		osMessagePut(DMA_Ethernet_QueueHandle, ADC_Data[i], 0);
+	}
+}
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
-	osMessagePut(DMA_Ethernet_QueueHandle,
-			ADC_Data[0],
-//				 -1,//((uint16_t)'t' << 8) | (uint16_t)'e'
-				 0);
+	for (int i = 64; i < 128; ++i) {
+		osMessagePut(DMA_Ethernet_QueueHandle, ADC_Data[i], 0);
+	}
+
 }
 /* USER CODE END 4 */
 
@@ -486,19 +489,22 @@ void StartNetTask(void const *argument) {
 	char *buffer = pvPortMalloc(2048);
 	char *pbuffer = pvPortMalloc(200);
 	uint16_t len;
-	printf("Incoming connection\r\n");
+//	printf("Incoming connection\r\n");
 	HAL_TIM_Base_Start_IT(&htim3);
-	HAL_ADC_Start_DMA(&hadc1, (uint32_t *) &ADC_Data, 1);
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t *) &ADC_Data, 128);
 //	int ad = DMA1_Channel1->CCR;
 //	int ad2 = ADC1->CR2;
 
 	osEvent event;
+	int nul=0;
 	for (;;) {
 		event = osMessageGet(DMA_Ethernet_QueueHandle, 0);
 //		sprintf(buffer, "Event %x!\r\n", event.status);
 //		netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
 		if (event.status == osEventMessage) {
-			netconn_write(nc, event.value.p, 2, NETCONN_COPY);
+			netconn_write(nc, &nul, event.value.p, NETCONN_COPY); //1KB
+		} else{
+			HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 		}
 	}
 	/* USER CODE END StartNetTask */
